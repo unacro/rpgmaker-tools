@@ -43,9 +43,25 @@ class MapDataEditor {
 			const buffer = [];
 			for (let j = 0; j < this._height; j++) {
 				const colIndex = this._x + j;
+				if (
+					rowIndex + colIndex < 0 ||
+					rowIndex + colIndex >= mapTileIdChunk.length
+				) {
+					throw new Error("Array index out of bounds");
+				}
 				buffer.push(mapTileIdChunk[rowIndex + colIndex]);
 			}
 			mapDataMatrix.push([...buffer]);
+		}
+		if (
+			mapDataMatrix.length !== this._width ||
+			mapDataMatrix?.[0]?.length !== this._height
+		) {
+			console.log(
+				`(x, y)=(${this._x}, ${this._y}) width=${this._width} height=${this._height}`,
+			);
+			console.error("mapDataMatrix:", mapDataMatrix);
+			throw new Error("Map selection failed");
 		}
 		return mapDataMatrix;
 	}
@@ -60,7 +76,7 @@ class MapDataEditor {
 					mapDataMatrix[i][j];
 			}
 		}
-		console.log(this._cache.data.slice(offsetIndex));
+		this._rewrite();
 		return true;
 	}
 
@@ -156,10 +172,13 @@ class MapDataEditor {
 	}
 
 	setMatrix(x, y, width, height) {
-		this._x = x;
-		this._y = y;
-		this._width = width;
-		this._height = height;
+		this._x = Number.parseInt(x);
+		this._y = Number.parseInt(y);
+		this._width = Number.parseInt(width);
+		this._height = Number.parseInt(height);
+		console.log(
+			`Set matrix start at (${x}, ${y}) width=${width} height=${height}`,
+		);
 	}
 
 	handle(handleMethod) {
@@ -212,22 +231,8 @@ class MapDataEditor {
 		}
 		console.log("after: ", mapMatrix);
 		this._setMapSelection(mapMatrix);
-		this._rewrite();
 		return true;
 	}
 }
 
-const mapId = 12;
-const targetMapDataFile = `../Project1/data/Map${mapId}.json`;
-const mapEditor = new MapDataEditor(targetMapDataFile);
-
-mapEditor.setMatrix(7, 1, 11, 11);
-console.log(
-	`Start to handle map ${mapId}(name: [${mapEditor.getMapName()}])...`,
-);
-// mapEditor.handle("LR");
-// mapEditor.handle("RL");
-// mapEditor.handle("TB");
-// mapEditor.handle("BT");
-// mapEditor.handle("MIRROR");
-mapEditor.handle("ROTATE");
+export default MapDataEditor;
