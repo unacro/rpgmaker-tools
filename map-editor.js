@@ -1,238 +1,281 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 class MapDataEditor {
-	_getMapData(mapDataFilePath) {
-		if (!existsSync(mapDataFilePath)) {
-			throw new Error(`File \`${mapDataFilePath}\` not exists`);
-		}
-		const mapObject = JSON.parse(readFileSync(mapDataFilePath, "utf-8"));
-		if (!("data" in mapObject) || !Array.isArray(mapObject.data)) {
-			throw new Error(`Map data file \`${mapDataFilePath}\` not contains data`);
-		}
-		const chunkSize = mapObject.data.length / 6; // 一二三四层 阴影层 区域ID层
-		if (chunkSize !== Number.parseInt(chunkSize)) {
-			throw new Error("Map data size is wrong");
-		}
-		if (mapObject.data.length / 6 / mapObject.width !== mapObject.height) {
-			throw new Error("Map tile id layer size don't match map width & height");
-		}
-		return mapObject;
+	constructor() {
+		this._filepath = undefined;
+		this._cache = undefined;
+		this._posX = undefined;
+		this._posY = undefined;
+		this._rectWidth = undefined;
+		this._rectHeight = undefined;
 	}
 
-	constructor(path) {
-		this._dataFile = path;
-		this._cache = this._getMapData(path);
-		this._tileIdChunkIndex = (this._cache.data.length * 5) / 6;
-		this._x = undefined;
-		this._y = undefined;
-		this._width = undefined;
-		this._height = undefined;
-	}
-
-	_getMapSelection() {
-		if (!this._x || !this._y || !this._width || !this._height) {
-			throw new Error("Map selection is not set");
-		}
-		const mapTileIdChunk = this._cache.data.slice(
-			this._tileIdChunkIndex,
-			this._cache.data.length,
-		);
-		const mapDataMatrix = []; // map tileId matrix
-		for (let i = 0; i < this._width; i++) {
-			const rowIndex = (this._y + i) * this._cache.width;
-			const buffer = [];
-			for (let j = 0; j < this._height; j++) {
-				const colIndex = this._x + j;
-				if (
-					rowIndex + colIndex < 0 ||
-					rowIndex + colIndex >= mapTileIdChunk.length
-				) {
-					throw new Error("Array index out of bounds");
-				}
-				buffer.push(mapTileIdChunk[rowIndex + colIndex]);
-			}
-			mapDataMatrix.push([...buffer]);
-		}
-		if (
-			mapDataMatrix.length !== this._width ||
-			mapDataMatrix?.[0]?.length !== this._height
-		) {
-			console.log(
-				`(x, y)=(${this._x}, ${this._y}) width=${this._width} height=${this._height}`,
-			);
-			console.error("mapDataMatrix:", mapDataMatrix);
-			throw new Error("Map selection failed");
-		}
-		return mapDataMatrix;
-	}
-
-	_setMapSelection(mapDataMatrix) {
-		const offsetIndex = this._tileIdChunkIndex;
-		for (let i = 0; i < this._width; i++) {
-			const rowIndex = (this._y + i) * this._cache.width;
-			for (let j = 0; j < this._height; j++) {
-				const colIndex = this._x + j;
-				this._cache.data[offsetIndex + rowIndex + colIndex] =
-					mapDataMatrix[i][j];
-			}
-		}
-		this._rewrite();
-		return true;
-	}
-
-	_leftToRight(mapDataMatrix) {
-		const [width, height] = [mapDataMatrix[0].length, mapDataMatrix.length];
-		// const newMapDataMatrix = Array.from(this._height, () => Array(this._width).fill(0));
+	_leftToRight(rawMatrix) {
+		const [width, height] = [rawMatrix[0].length, rawMatrix.length];
+		// const newMatrix = Array.from({ length: height }, () => Array(width).fill(0));
+		const newMatrix = rawMatrix.map((rowData) => [...rowData]);
 		for (let row = 0; row < height; row++) {
 			for (let col = Math.ceil(width / 2); col < width; col++) {
-				// console.log(`tile[${row}][${col}] = ${mapDataMatrix[row][col]} => ${mapDataMatrix[row][width - col - 1]}`,);
-				mapDataMatrix[row][col] = mapDataMatrix[row][width - col - 1];
+				// console.log(`tile[${row}][${col}] = ${newMatrix[row][col]} => ${rawMatrix[row][width - col - 1]}`,);
+				newMatrix[row][col] = rawMatrix[row][width - col - 1];
 			}
 		}
-		return mapDataMatrix;
+		return newMatrix;
 	}
 
-	_rightToLeft(mapDataMatrix) {
-		const [width, height] = [mapDataMatrix[0].length, mapDataMatrix.length];
+	_rightToLeft(rawMatrix) {
+		const [width, height] = [rawMatrix[0].length, rawMatrix.length];
+		const newMatrix = rawMatrix.map((rowData) => [...rowData]);
 		for (let row = 0; row < height; row++) {
 			for (let col = 0; col < Math.floor(width / 2); col++) {
-				mapDataMatrix[row][col] = mapDataMatrix[row][width - col - 1];
+				newMatrix[row][col] = rawMatrix[row][width - col - 1];
 			}
 		}
-		return mapDataMatrix;
+		return newMatrix;
 	}
 
-	_topToBottom(mapDataMatrix) {
-		const [width, height] = [mapDataMatrix[0].length, mapDataMatrix.length];
+	_topToBottom(rawMatrix) {
+		const [width, height] = [rawMatrix[0].length, rawMatrix.length];
+		const newMatrix = rawMatrix.map((rowData) => [...rowData]);
 		for (let row = Math.ceil(height / 2); row < height; row++) {
 			for (let col = 0; col < width; col++) {
-				mapDataMatrix[row][col] = mapDataMatrix[height - row - 1][col];
+				newMatrix[row][col] = rawMatrix[height - row - 1][col];
 			}
 		}
-		return mapDataMatrix;
+		return newMatrix;
 	}
 
-	_bottomToTop(mapDataMatrix) {
-		const [width, height] = [mapDataMatrix[0].length, mapDataMatrix.length];
+	_bottomToTop(rawMatrix) {
+		const [width, height] = [rawMatrix[0].length, rawMatrix.length];
+		const newMatrix = rawMatrix.map((rowData) => [...rowData]);
 		for (let row = 0; row < Math.floor(height / 2); row++) {
 			for (let col = 0; col < width; col++) {
-				mapDataMatrix[row][col] = mapDataMatrix[height - row - 1][col];
+				newMatrix[row][col] = rawMatrix[height - row - 1][col];
 			}
 		}
-		return mapDataMatrix;
+		return newMatrix;
 	}
 
-	_rotate(mapDataMatrix) {
-		const [width, height] = [mapDataMatrix[0].length, mapDataMatrix.length];
+	_rotate(rawMatrix) {
+		const [width, height] = [rawMatrix[0].length, rawMatrix.length];
+		const newMatrix = rawMatrix.map((rowData) => [...rowData]);
 		if (width !== height) {
-			console.error("Map selection is not square");
-			return false;
+			console.error("Raw matrix is not a square");
+			return rawMatrix;
 		}
 		const sideLength = width; // 正方形边长
-		const halfSideLength = Math.ceil(sideLength / 2); // 正方形边长的一半
-		for (let row = 0; row < halfSideLength; row++) {
-			for (let col = 0; col < halfSideLength; col++) {
+		const halfSideLengthLimit = Math.ceil(sideLength / 2); // 正方形边长的一半
+		for (let row = 0; row < halfSideLengthLimit; row++) {
+			for (let col = 0; col < halfSideLengthLimit; col++) {
 				if (
-					(row < halfSideLength && col < halfSideLength) ||
-					mapDataMatrix[sideLength - 1 - col][row] === 0
+					(row < halfSideLengthLimit && col < halfSideLengthLimit) ||
+					newMatrix[sideLength - 1 - col][row] === 0
 				) {
-					mapDataMatrix[sideLength - 1 - col][row] = mapDataMatrix[row][col];
+					newMatrix[sideLength - 1 - col][row] = rawMatrix[row][col];
 				}
 				if (
-					(row < halfSideLength && col < halfSideLength) ||
-					mapDataMatrix[col][sideLength - 1 - row] === 0
+					(row < halfSideLengthLimit && col < halfSideLengthLimit) ||
+					newMatrix[col][sideLength - 1 - row] === 0
 				) {
-					mapDataMatrix[col][sideLength - 1 - row] = mapDataMatrix[row][col];
+					newMatrix[col][sideLength - 1 - row] = rawMatrix[row][col];
 				}
 				if (
-					(row < halfSideLength && col < halfSideLength) ||
-					mapDataMatrix[sideLength - 1 - row][sideLength - 1 - col] === 0
+					(row < halfSideLengthLimit && col < halfSideLengthLimit) ||
+					newMatrix[sideLength - 1 - row][sideLength - 1 - col] === 0
 				) {
-					mapDataMatrix[sideLength - 1 - row][sideLength - 1 - col] =
-						mapDataMatrix[row][col];
+					newMatrix[sideLength - 1 - row][sideLength - 1 - col] =
+						rawMatrix[row][col];
 				}
 			}
 		}
-		return mapDataMatrix;
+		return newMatrix;
 	}
 
-	_rewrite() {
-		try {
-			writeFileSync(this._dataFile, JSON.stringify(this._cache), "utf8");
-			console.log(`Save map data to \`${this._dataFile}\` successfully`);
+	transformMatrix(rawMatrix, transformMethod) {
+		function __isMatrix(matrix) {
+			if (!Array.isArray(matrix) || matrix.length === 0) {
+				return false;
+			}
+			const columnLength = matrix[0].length;
+			for (let i = 1; i < matrix.length; i++) {
+				if (!Array.isArray(matrix[i]) || matrix[i].length !== columnLength) {
+					return false;
+				}
+			}
 			return true;
-		} catch (err) {
-			console.error(err);
-			return false;
 		}
+		if (!__isMatrix(rawMatrix)) {
+			throw new Error("Input data is not a matrix");
+		}
+		let transformedMatrix = undefined;
+		switch (transformMethod) {
+			case "LR":
+				console.log("Copy left to right");
+				transformedMatrix = this._leftToRight(rawMatrix);
+				break;
+
+			case "RL":
+				console.log("Copy right to left");
+				transformedMatrix = this._rightToLeft(rawMatrix);
+				break;
+
+			case "TB":
+				console.log("Copy top to bottom");
+				transformedMatrix = this._topToBottom(rawMatrix);
+				break;
+
+			case "BT":
+				console.log("Copy bottom to top");
+				transformedMatrix = this._bottomToTop(rawMatrix);
+				break;
+
+			case "MIRROR":
+				console.log("Mirror flip");
+				transformedMatrix = this._topToBottom(this._leftToRight(rawMatrix));
+				break;
+
+			case "ROTATE":
+				console.log("Rotation by left-top");
+				transformedMatrix = this._rotate(rawMatrix);
+				break;
+
+			default:
+				break;
+		}
+		console.log("before:");
+		console.table(rawMatrix);
+		console.log("after: ");
+		console.table(transformedMatrix);
+		return transformedMatrix;
 	}
 
 	getMapName() {
 		return this._cache.displayName;
 	}
 
-	setMatrix(x, y, width, height) {
-		this._x = Number.parseInt(x);
-		this._y = Number.parseInt(y);
-		this._width = Number.parseInt(width);
-		this._height = Number.parseInt(height);
+	loadMapFile(mapDataFilePath) {
+		if (!existsSync(mapDataFilePath)) {
+			throw new Error(`File \`${mapDataFilePath}\` not exists`);
+		}
+		let mapDataObject = undefined;
+		try {
+			mapDataObject = JSON.parse(readFileSync(mapDataFilePath, "utf-8"));
+		} catch (error) {
+			throw new Error(
+				`Map data file \`${mapDataFilePath}\` parse content to json failed`,
+			);
+		}
+		if (!("data" in mapDataObject) || !Array.isArray(mapDataObject.data)) {
+			throw new Error(
+				`Map data object \`${mapDataFilePath}\` not contains data`,
+			);
+		}
+		const chunkSize = mapDataObject.data.length / 6; // 一二三四层 阴影层 区域ID层
+		if (chunkSize !== Number.parseInt(chunkSize)) {
+			throw new Error("Map data size is invalid");
+		}
+		if (
+			mapDataObject.data.length / 6 / mapDataObject.width !==
+			mapDataObject.height
+		) {
+			throw new Error("Map tile id layer size don't match map width & height");
+		}
+		this._filepath = mapDataFilePath; // 缓存文件路径
+		Object.freeze(mapDataObject); // 防止意外篡改地图对象的其他数据
+		this._cache = mapDataObject; // 缓存地图数据对象到类内部
+		return this._cache.data; // 没有递归 freeze 因此内部某个对象的属性仍然可以修改
+	}
+
+	saveMapFile(mapDataObject, mapDataFilePath) {
+		try {
+			writeFileSync(mapDataFilePath, JSON.stringify(mapDataObject), "utf8");
+			console.log(`Save map data to \`${mapDataFilePath}\` successfully`);
+			return true;
+		} catch (error) {
+			console.error(error);
+		}
+		return false;
+	}
+
+	setMatrix(posX, posY, rectWidth, rectHeight) {
+		this._posX = posX;
+		this._posY = posY;
+		this._rectWidth = rectWidth;
+		this._rectHeight = rectHeight;
 		console.log(
-			`Set matrix start at (${x}, ${y}) width=${width} height=${height}`,
+			`Set matrix start at (${posX}, ${posY}) width=${rectWidth} height=${rectHeight}`,
 		);
 	}
 
-	handle(handleMethod) {
-		if (!this._cache) {
-			throw new Error("Map data is not loaded");
+	loadMapDataFromFile(
+		{ posX, posY, rectWidth, rectHeight } = {
+			posX: this._posX,
+			posY: this._posY,
+			rectWidth: this._rectWidth,
+			rectHeight: this._rectHeight,
+		},
+		mapDataFilePath = undefined,
+	) {
+		if (mapDataFilePath) {
+			this.loadMapFile(mapDataFilePath);
 		}
-		let mapMatrix = this._getMapSelection(this._cache);
-		// const mapMatrix = [
-		// 	[1, 2, 3, 4, 5],
-		// 	[6, 0, 0, 0, 10],
-		// 	[11, 12, 0, 0, 15],
-		// 	[16, 0, 0, 0, 20],
-		// 	[21, 0, 0, 24, 25],
-		// ]; // debug
-		console.log("before:", mapMatrix);
-		switch (handleMethod) {
-			case "LR":
-				console.log("Copy left to right");
-				mapMatrix = this._leftToRight(mapMatrix);
-				break;
-
-			case "RL":
-				console.log("Copy right to left");
-				mapMatrix = this._rightToLeft(mapMatrix);
-				break;
-
-			case "TB":
-				console.log("Copy top to bottom");
-				mapMatrix = this._topToBottom(mapMatrix);
-				break;
-
-			case "BT":
-				console.log("Copy bottom to top");
-				mapMatrix = this._bottomToTop(mapMatrix);
-				break;
-
-			case "MIRROR":
-				console.log("Mirror flip");
-				mapMatrix = this._leftToRight(mapMatrix);
-				mapMatrix = this._topToBottom(mapMatrix);
-				break;
-
-			case "ROTATE":
-				console.log("Rotation by left-top");
-				mapMatrix = this._rotate(mapMatrix);
-				break;
-
-			default:
-				break;
+		if (!posX || !posY || !rectWidth || !rectHeight) {
+			throw new Error("Map data matrix selection is not set");
 		}
-		console.log("after: ", mapMatrix);
-		this._setMapSelection(mapMatrix);
+		const [offsetIndex, maxlength] = [
+			(this._cache.data.length * 5) / 6,
+			this._cache.data.length,
+		];
+		const mapTileIdChunk = this._cache.data.slice(offsetIndex, maxlength); // RM 区域 ID 层
+		const mapDataMatrix = []; // map tileId matrix
+		for (let i = 0; i < rectWidth; i++) {
+			const rowOffset = (posY + i) * this._cache.width;
+			const buffer = [];
+			for (let j = 0; j < rectHeight; j++) {
+				const index = rowOffset + (posX + j); // rowOffset + colOffset
+				if (index < 0 || index >= mapTileIdChunk.length) {
+					console.warn(
+						`Set matrix start at (${posX}, ${posY}) width=${rectWidth} height=${rectHeight}`,
+					);
+					throw new Error(
+						`Array index out of bounds: index=${index} maxLength=${mapTileIdChunk.length}`,
+					);
+				}
+				buffer.push(mapTileIdChunk[index]);
+			}
+			mapDataMatrix.push([...buffer]);
+		}
+		if (
+			mapDataMatrix.length !== rectWidth ||
+			mapDataMatrix?.[0]?.length !== rectHeight
+		) {
+			console.error(
+				"Map data matrix size is invalid:",
+				`(x, y)=(${posX}, ${posY}) width=${rectWidth} height=${rectHeight}`,
+			);
+			console.table("mapDataMatrix:", mapDataMatrix);
+			throw new Error("Load map data matrix failed");
+		}
+		return mapDataMatrix;
+	}
+
+	saveMapDataToFile(mapDataMatrix, mapDataFilePath = undefined) {
+		if (mapDataFilePath) {
+			this.loadMapFile(mapDataFilePath);
+		}
+		const offsetIndex = (this._cache.data.length * 5) / 6;
+		for (let i = 0; i < this._rectWidth; i++) {
+			const rowOffset = (this._posY + i) * this._cache.width;
+			for (let j = 0; j < this._rectHeight; j++) {
+				const colOffset = this._posX + j;
+				this._cache.data[offsetIndex + rowOffset + colOffset] =
+					mapDataMatrix[i][j];
+			}
+		}
+		this.saveMapFile(this._cache, this._filepath);
 		return true;
 	}
 }
 
-export default MapDataEditor;
+const mapDataEditor = new MapDataEditor();
+export default mapDataEditor;

@@ -1,12 +1,10 @@
-import { statSync, readdirSync } from "node:fs";
+import { statSync, readdirSync, createReadStream } from "node:fs";
 import path from "node:path";
-const fs = require("node:fs");
-const readline = require("node:readline");
-import MapDataEditor from "./map-editor";
+import { createInterface } from "node:readline";
+import mapEditor from "./map-editor";
 
 const mapId = process.env.RM_MAP_TEMPLATE_ID;
-const targetMapDataFile = `${process.env.RM_MAP_TEMPLATE_ROOT}/data/Map${mapId}.json`;
-const mapEditor = new MapDataEditor(targetMapDataFile);
+const targetMapDataFile = `${process.env.RM_GAME_ROOT}/data/Map${mapId}.json`;
 
 function main(args) {
 	let option = "build";
@@ -14,18 +12,25 @@ function main(args) {
 	switch (option.toLowerCase()) {
 		case "edit": {
 			const matrixConfig = {
-				x: process.env.RM_MAP_TEMPLATE_RECT_X,
-				y: process.env.RM_MAP_TEMPLATE_RECT_Y,
-				width: process.env.RM_MAP_TEMPLATE_RECT_W,
-				height: process.env.RM_MAP_TEMPLATE_RECT_H,
+				posX: Number.parseInt(process.env.RM_MAP_TARGET_RECT_X),
+				posY: Number.parseInt(process.env.RM_MAP_TARGET_RECT_Y),
+				rectWidth: Number.parseInt(process.env.RM_MAP_TARGET_RECT_W),
+				rectHeight: Number.parseInt(process.env.RM_MAP_TARGET_RECT_H),
 			};
 			const workMode = process.env.APP_WORK_MODE; // LR / RL / TB / BT / MIRROR / ROTATE
 
-			mapEditor.setMatrix(...Object.values(matrixConfig));
+			mapEditor.setMatrix(
+				...Object.values(matrixConfig).map((value) => Number.parseInt(value)),
+			); // 设置选区
+
+			mapEditor.loadMapFile(targetMapDataFile); // 缓存文件名 & 载入地图数据对象
+			const rawMatrix = mapEditor.loadMapDataFromFile();
 			console.log(
 				`Start to handle map ${mapId}(name: [${mapEditor.getMapName()}])...`,
 			);
-			mapEditor.handle(workMode);
+			mapEditor.saveMapDataToFile(
+				mapEditor.transformMatrix(rawMatrix, workMode),
+			);
 			break;
 		}
 
@@ -47,8 +52,8 @@ function main(args) {
 				const mapDataList = [];
 				function readFilesSequentially(index) {
 					if (index < newMapFileList.length) {
-						const fileStream = fs.createReadStream(newMapFileList[index]);
-						const rl = readline.createInterface({
+						const fileStream = createReadStream(newMapFileList[index]);
+						const rl = createInterface({
 							input: fileStream,
 							crlfDelay: Number.POSITIVE_INFINITY,
 						});
@@ -81,9 +86,7 @@ function main(args) {
 						// console.log(mapDataList);
 						const sample = mapDataList.pop().data;
 						const chunkedArray = [];
-						const chunkSize = Number.parseInt(
-							process.env.RM_MAP_TEMPLATE_RECT_W,
-						);
+						const chunkSize = Number.parseInt(process.env.RM_MAP_TARGET_RECT_W);
 						for (let i = 0; i < sample.length; i += chunkSize) {
 							chunkedArray.push(sample.slice(i, i + chunkSize));
 						}
