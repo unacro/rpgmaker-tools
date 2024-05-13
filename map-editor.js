@@ -153,21 +153,21 @@ class MapDataEditor {
 		return this._cache.displayName;
 	}
 
-	loadMapFile(mapDataFilePath) {
-		if (!existsSync(mapDataFilePath)) {
-			throw new Error(`File \`${mapDataFilePath}\` not exists`);
+	loadMapFile(mapDataFilepath) {
+		if (!existsSync(mapDataFilepath)) {
+			throw new Error(`File \`${mapDataFilepath}\` not exists`);
 		}
 		let mapDataObject = undefined;
 		try {
-			mapDataObject = JSON.parse(readFileSync(mapDataFilePath, "utf-8"));
+			mapDataObject = JSON.parse(readFileSync(mapDataFilepath, "utf-8"));
 		} catch (error) {
 			throw new Error(
-				`Map data file \`${mapDataFilePath}\` parse content to json failed`,
+				`Map data file \`${mapDataFilepath}\` parse content to json failed`,
 			);
 		}
 		if (!("data" in mapDataObject) || !Array.isArray(mapDataObject.data)) {
 			throw new Error(
-				`Map data object \`${mapDataFilePath}\` not contains data`,
+				`Map data object \`${mapDataFilepath}\` not contains data`,
 			);
 		}
 		const chunkSize = mapDataObject.data.length / 6; // 一二三四层 阴影层 区域ID层
@@ -180,16 +180,16 @@ class MapDataEditor {
 		) {
 			throw new Error("Map tile id layer size don't match map width & height");
 		}
-		this._filepath = mapDataFilePath; // 缓存文件路径
+		this._filepath = mapDataFilepath; // 缓存文件路径
 		Object.freeze(mapDataObject); // 防止意外篡改地图对象的其他数据
 		this._cache = mapDataObject; // 缓存地图数据对象到类内部
 		return this._cache.data; // 没有递归 freeze 因此内部某个对象的属性仍然可以修改
 	}
 
-	saveMapFile(mapDataObject, mapDataFilePath) {
+	saveMapFile(mapDataObject, mapDataFilepath) {
 		try {
-			writeFileSync(mapDataFilePath, JSON.stringify(mapDataObject), "utf8");
-			console.log(`Save map data to \`${mapDataFilePath}\` successfully`);
+			writeFileSync(mapDataFilepath, JSON.stringify(mapDataObject), "utf8");
+			console.log(`Save map data to \`${mapDataFilepath}\` successfully`);
 			return true;
 		} catch (error) {
 			console.error(error);
@@ -214,10 +214,10 @@ class MapDataEditor {
 			rectWidth: this._rectWidth,
 			rectHeight: this._rectHeight,
 		},
-		mapDataFilePath = undefined,
+		mapDataFilepath = undefined,
 	) {
-		if (mapDataFilePath) {
-			this.loadMapFile(mapDataFilePath);
+		if (mapDataFilepath) {
+			this.loadMapFile(mapDataFilepath);
 		}
 		if (!posX || !posY || !rectWidth || !rectHeight) {
 			throw new Error("Map data matrix selection is not set");
@@ -259,9 +259,9 @@ class MapDataEditor {
 		return mapDataMatrix;
 	}
 
-	saveMapDataToFile(mapDataMatrix, mapDataFilePath = undefined) {
-		if (mapDataFilePath) {
-			this.loadMapFile(mapDataFilePath);
+	saveMapDataToFile(mapDataMatrix, mapDataFilepath = undefined) {
+		if (mapDataFilepath) {
+			this.loadMapFile(mapDataFilepath);
 		}
 		const offsetIndex = (this._cache.data.length * 5) / 6;
 		for (let i = 0; i < this._rectWidth; i++) {
@@ -274,6 +274,35 @@ class MapDataEditor {
 		}
 		this.saveMapFile(this._cache, this._filepath);
 		return true;
+	}
+
+	loadMapMatrix(mapMatrixFilepath = undefined, width = 0) {
+		if (!existsSync(mapMatrixFilepath)) {
+			throw new Error(`File \`${mapMatrixFilepath}\` not exists`);
+		}
+		let mapMatrix = undefined;
+		try {
+			console.log(`Load map matrix from file: \`${mapMatrixFilepath}\``);
+			const fileContent = readFileSync(mapMatrixFilepath, "utf-8");
+			if (width > 0) {
+				const regex = /\[\s*(\d+\s*,?\s*)+\]/g;
+				const matched = fileContent.match(regex);
+				const mapMatrixArray = JSON.parse(matched[0]);
+				mapMatrix = [];
+				for (let i = 0; i < mapMatrixArray.length; i += width) {
+					mapMatrix.push(mapMatrixArray.slice(i, i + width));
+				}
+			} else {
+				const regex = /\[\s*(\[\s*(\d+,?\s*)+\],?\s*)+\]/g; //匹配二维数组 JSON 字符串
+				mapMatrix = JSON.parse(fileContent.match(regex)[0]);
+			}
+		} catch (error) {
+			console.error(error);
+			throw new Error(
+				`Map data file \`${mapMatrixFilepath}\` parse content to json failed`,
+			);
+		}
+		return mapMatrix;
 	}
 }
 

@@ -8,7 +8,7 @@ const targetMapDataFile = `${process.env.RM_GAME_ROOT}/data/Map${mapId}.json`;
 
 function main(args) {
 	let option = "build";
-	if (args) option = Array.isArray(args) ? args[0] : args;
+	if (Array.isArray(args)) option = args.length > 0 ? args[0] : "default";
 	switch (option.toLowerCase()) {
 		case "edit": {
 			const matrixConfig = {
@@ -33,14 +33,13 @@ function main(args) {
 			);
 			break;
 		}
-
 		default:
 			try {
 				const targetPath = "./data";
 				const stats = statSync(targetPath);
-				const newMapFileList = [];
+				const mapMatrixFileList = [];
 				if (stats.isDirectory()) {
-					newMapFileList.push(
+					mapMatrixFileList.push(
 						...readdirSync(targetPath)
 							.filter((file) => file.endsWith(".txt"))
 							.map((file) => path.join(targetPath, file)),
@@ -48,52 +47,13 @@ function main(args) {
 				} else {
 					console.warn(`path ${targetPath} is invalid`);
 				}
-				const targetStart = '"data":';
-				const mapDataList = [];
-				function readFilesSequentially(index) {
-					if (index < newMapFileList.length) {
-						const fileStream = createReadStream(newMapFileList[index]);
-						const rl = createInterface({
-							input: fileStream,
-							crlfDelay: Number.POSITIVE_INFINITY,
-						});
-
-						let found = false;
-
-						rl.on("line", (line) => {
-							if (line.startsWith(targetStart)) {
-								mapDataList.push(
-									JSON.parse(
-										`{${line
-											.replaceAll("1", "8")
-											.replaceAll("2", "98")
-											.replaceAll("3", "99")
-											.replace(/,$/, "")}}`,
-									),
-								);
-								found = true;
-							}
-						});
-
-						rl.on("close", () => {
-							if (!found) {
-								mapDataList.push(`Not found in ${newMapFileList[index]}`);
-							}
-							readFilesSequentially(index + 1);
-						});
-					} else {
-						console.log("All files read");
-						// console.log(mapDataList);
-						const sample = mapDataList.pop().data;
-						const chunkedArray = [];
-						const chunkSize = Number.parseInt(process.env.RM_MAP_TARGET_RECT_W);
-						for (let i = 0; i < sample.length; i += chunkSize) {
-							chunkedArray.push(sample.slice(i, i + chunkSize));
-						}
-						mapEditor._setMapSelection(chunkedArray);
-					}
-				}
-				readFilesSequentially(0);
+				const mapMatrixList = mapMatrixFileList.map((mapMatrixFilepath) =>
+					mapEditor.loadMapMatrix(mapMatrixFilepath, 11),
+				);
+				mapMatrixList.map((mapMatrix, index) => {
+					console.log(`Map matrix ${index + 1}:`);
+					console.table(mapMatrix);
+				});
 			} catch (err) {
 				console.error(err);
 			}
