@@ -2,6 +2,7 @@ import { statSync, readdirSync, createReadStream } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import mapEditor from "./map-editor";
+import MapFlag from "./config";
 
 const mapId = process.env.RM_MAP_TEMPLATE_ID;
 const targetMapDataFile = `${process.env.RM_GAME_ROOT}/data/Map${mapId}.json`;
@@ -33,6 +34,7 @@ function main(args) {
 			);
 			break;
 		}
+
 		default:
 			try {
 				const targetPath = "./data";
@@ -50,9 +52,17 @@ function main(args) {
 				const mapMatrixList = mapMatrixFileList.map((mapMatrixFilepath) =>
 					mapEditor.loadMapMatrix(mapMatrixFilepath, 11),
 				);
+				const mapFlagMap = {
+					0: MapFlag.floor[0],
+					1: MapFlag.wall[0],
+					2: MapFlag.door[0],
+					3: MapFlag.door[1],
+				}; // 映射地图标记
 				mapMatrixList.map((mapMatrix, index) => {
 					console.log(`Map matrix ${index + 1}:`);
-					console.table(mapMatrix);
+					console.table(
+						mapMatrix.map((row) => row.map((cell) => mapFlagMap[cell])),
+					);
 				});
 			} catch (err) {
 				console.error(err);
